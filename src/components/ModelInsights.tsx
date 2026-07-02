@@ -1,7 +1,13 @@
-import React from 'react';
+'use client';
+
+import React, { useState } from 'react';
 import { Cpu, CheckCircle2, ChevronRight } from 'lucide-react';
+import { HyperparamsModal } from './HyperparamsModal';
 
 export const ModelInsights: React.FC = () => {
+  const [paramsModalOpen, setParamsModalOpen] = useState(false);
+  const [selectedModel, setSelectedModel] = useState<'xgboost' | 'random_forest' | 'logistic_regression' | null>(null);
+
   const models = [
     {
       name: 'Bộ Phân Loại XGBoost',
@@ -10,6 +16,7 @@ export const ModelInsights: React.FC = () => {
       accuracy: '89.0%',
       auc: '0.932',
       color: 'red' as const,
+      id: 'xgboost' as const,
     },
     {
       name: 'Ensemble Random Forest',
@@ -18,6 +25,7 @@ export const ModelInsights: React.FC = () => {
       accuracy: '86.4%',
       auc: '0.908',
       color: 'rose' as const,
+      id: 'random_forest' as const,
     },
     {
       name: 'Hồi Quy Logistic',
@@ -26,6 +34,7 @@ export const ModelInsights: React.FC = () => {
       accuracy: '81.2%',
       auc: '0.845',
       color: 'gray' as const,
+      id: 'logistic_regression' as const,
     },
   ];
 
@@ -102,10 +111,16 @@ export const ModelInsights: React.FC = () => {
                   <p className="text-xs font-semibold text-neutral-500 leading-relaxed">
                     {model.desc}
                   </p>
-                  <div className="flex items-center gap-1 text-[10px] font-black uppercase text-red-600 mt-4 cursor-pointer hover:text-red-700 transition-colors">
+                  <button 
+                    onClick={() => {
+                      setSelectedModel(model.id);
+                      setParamsModalOpen(true);
+                    }}
+                    className="flex items-center gap-1 text-[10px] font-black uppercase text-red-650 mt-4 cursor-pointer hover:text-red-700 transition-colors bg-transparent border-0 select-none self-start"
+                  >
                     <span>Xem Siêu tham số (Hyperparameters)</span>
                     <ChevronRight size={12} className="stroke-[2.5]" />
-                  </div>
+                  </button>
                 </div>
               </div>
             );
@@ -149,6 +164,11 @@ export const ModelInsights: React.FC = () => {
           </div>
         </div>
       </div>
+      <HyperparamsModal
+        isOpen={paramsModalOpen}
+        onClose={() => setParamsModalOpen(false)}
+        modelType={selectedModel}
+      />
     </div>
   );
 };

@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { CustomButton } from '@/components/CustomButton';
+import { HyperparamsModal } from '@/components/HyperparamsModal';
 
 // Định nghĩa Interface dữ liệu Supabase
 interface SupabaseStats {
@@ -42,12 +43,13 @@ interface FormState {
   smoker: number; // 1 = Có, 0 = Không
 }
 
-type RiskLevel = 'Low' | 'Medium' | 'High' | null;
+type RiskLevel = 'Thấp' | 'Trung bình' | 'Cao' | null;
 
 interface PredictResult {
   riskLevel: RiskLevel;
   score: number;
   recommendations: string[];
+  executedModel?: string;
 }
 
 type PITab = 'demographics' | 'correlations' | 'trends';
@@ -74,6 +76,9 @@ export default function DashboardPage() {
   
   const [predictLoading, setPredictLoading] = useState(false);
   const [result, setResult] = useState<PredictResult | null>(null);
+  const [modelType, setModelType] = useState<'xgboost' | 'random_forest' | 'logistic_regression'>('xgboost');
+  const [paramsModalOpen, setParamsModalOpen] = useState(false);
+  const [selectedModelForParams, setSelectedModelForParams] = useState<'xgboost' | 'random_forest' | 'logistic_regression' | null>(null);
 
   // State quản lý Báo cáo Power BI
   const [activeTab, setActiveTab] = useState<PITab>('demographics');
@@ -154,33 +159,36 @@ export default function DashboardPage() {
     }));
   };
 
-  const handlePredict = (e: React.FormEvent) => {
+  const handlePredict = async (e: React.FormEvent) => {
     e.preventDefault();
     setPredictLoading(true);
+    setResult(null);
     
-    // Giả lập 2 giây gửi dữ liệu qua mô hình ML
-    setTimeout(() => {
-      let score = 10;
+    try {
+      const response = await fetch('/api/predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          Sex: form.sex,
+          Age: form.age,
+          HighBP: form.highBP,
+          HighChol: form.highChol,
+          BMI: form.bmi,
+          Smoker: form.smoker,
+          modelType: modelType,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Có lỗi xảy ra khi thực hiện phân tích.');
+      }
+
+      const data = await response.json();
       
-      if (form.highBP === 1) score += 25;
-      if (form.highChol === 1) score += 20;
-      if (form.smoker === 1) score += 15;
-      if (form.sex === 1) score += 5;
-      
-      // Đóng góp của nhóm tuổi (1-13)
-      score += form.age * 3.2;
-
-      // Đóng góp của chỉ số BMI
-      if (form.bmi >= 30) score += 14;
-      else if (form.bmi >= 25) score += 6;
-
-      score = Math.max(5, Math.min(98, score));
-
-      let riskLevel: RiskLevel = 'Low';
-      if (score >= 65) riskLevel = 'High';
-      else if (score >= 35) riskLevel = 'Medium';
-
-      const recs: string[] = [];
+      const recs: string[] = [data.advice];
       if (form.highBP === 1) {
         recs.push("Kiểm soát huyết áp tâm thu dưới 130 mmHg bằng cách giảm muối và theo dõi sinh hiệu định kỳ.");
       }
@@ -193,20 +201,19 @@ export default function DashboardPage() {
       if (form.bmi >= 25) {
         recs.push("Điều chỉnh cân nặng về mức BMI lý tưởng (18.5 - 22.9). Kết hợp bài tập tim mạch 150 phút/tuần.");
       }
-      if (riskLevel === 'High') {
-        recs.push("Cần sắp xếp lịch khám chuyên khoa tim mạch sớm để làm điện tâm đồ gắng sức và siêu âm tim.");
-      }
-      if (recs.length === 0) {
-        recs.push("Các chỉ số sức khỏe của bạn hiện rất tốt. Tiếp tục duy trì chế độ dinh dưỡng Địa Trung Hải lành mạnh.");
-      }
 
       setResult({
-        riskLevel,
-        score,
-        recommendations: recs
+        riskLevel: data.riskLevel,
+        score: data.score,
+        recommendations: recs,
+        executedModel: data.executedModel
       });
+    } catch (err: any) {
+      console.error("Lỗi khi kết nối với máy chủ dự đoán:", err);
+      alert(err.message || "Không thể kết nối đến máy chủ chẩn đoán.");
+    } finally {
       setPredictLoading(false);
-    }, 2000);
+    }
   };
 
   const handleReset = () => {
@@ -223,21 +230,21 @@ export default function DashboardPage() {
 
   // Cấu hình hiển thị màu sắc nguy cơ
   const riskColorMap = {
-    Low: {
+    'Thấp': {
       bg: 'bg-emerald-500/8 border-emerald-500/15 text-emerald-950',
       badge: 'bg-emerald-600 text-white',
       icon: ShieldCheck,
       title: 'Nguy cơ Thấp',
       desc: 'Chỉ số tim mạch ở mức an toàn. Hãy tiếp tục duy trì lối sống lành mạnh!',
     },
-    Medium: {
+    'Trung bình': {
       bg: 'bg-amber-500/8 border-amber-500/15 text-amber-950',
       badge: 'bg-amber-600 text-white',
       icon: HeartPulse,
       title: 'Nguy cơ Trung bình',
       desc: 'Xuất hiện các dấu hiệu cảnh báo vừa phải. Khuyến nghị điều chỉnh lối sống sớm.',
     },
-    High: {
+    'Cao': {
       bg: 'bg-red-500/8 border-red-500/20 text-red-950',
       badge: 'bg-red-600 text-white animate-medical-pulse shadow-md shadow-red-500/20',
       icon: AlertCircle,
@@ -343,6 +350,28 @@ export default function DashboardPage() {
             <div className="p-5">
               {!result ? (
                 <form onSubmit={handlePredict} className="flex flex-col gap-4">
+                  {/* Lựa chọn mô hình chẩn đoán */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 text-neutral-500">
+                      <Brain size={13} className="text-red-500" /> Thuật toán chẩn đoán AI
+                    </label>
+                    <div className="relative">
+                      <select
+                        name="modelType"
+                        value={modelType}
+                        onChange={(e) => setModelType(e.target.value as any)}
+                        className="glass-input rounded-xl px-3 py-2 text-xs font-semibold text-neutral-800 shadow-sm outline-none w-full appearance-none cursor-pointer"
+                      >
+                        <option value="xgboost">XGBoost Ensemble (Độ chính xác cao)</option>
+                        <option value="random_forest">Random Forest (Mô hình Tập hợp)</option>
+                        <option value="logistic_regression">Logistic Regression (Hồi quy đối chứng)</option>
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-neutral-500">
+                        <span className="text-[9px]">▼</span>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Nhóm tuổi */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 text-neutral-500">
@@ -500,6 +529,11 @@ export default function DashboardPage() {
                       <div className={`px-4 py-1.5 rounded-xl font-black text-sm shadow-sm ${currentResult.badge}`}>
                         {result.score}% Nguy cơ
                       </div>
+                      {result.executedModel && (
+                        <div className="text-[9px] font-bold uppercase tracking-wider text-neutral-400 mt-1">
+                          Thuật toán: {result.executedModel}
+                        </div>
+                      )}
                     </div>
 
                     <div>
@@ -649,35 +683,86 @@ export default function DashboardPage() {
             </div>
             
             <div className="p-5 flex-1 flex flex-col justify-between gap-4 bg-white/10">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="bg-white/50 border border-neutral-200/30 p-4 rounded-xl shadow-sm">
-                  <div className="flex justify-between items-start">
-                    <span className="text-[10px] uppercase text-red-600 font-extrabold">Mô hình Chính</span>
-                    <span className="text-[9px] uppercase font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-full">Primary</span>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                {/* XGBoost Card */}
+                <div className="bg-white/50 border border-neutral-200/30 p-4 rounded-xl shadow-sm flex flex-col justify-between h-full">
+                  <div>
+                    <div className="flex justify-between items-start">
+                      <span className="text-[10px] uppercase text-red-650 font-extrabold">Mô hình Chính</span>
+                      <span className="text-[9px] uppercase font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-full">Primary</span>
+                    </div>
+                    <h4 className="font-black text-sm uppercase text-neutral-800 mt-2">XGBoost Ensemble</h4>
+                    <p className="text-[10px] text-neutral-400 leading-relaxed font-semibold mt-1">
+                      Cho kết quả chính xác cao đối với dữ liệu phân loại lâm sàng dạng bảng.
+                    </p>
+                    <div className="flex gap-4 mt-3 text-[10px] font-black uppercase text-neutral-700">
+                      <span>Accuracy: 89.0%</span>
+                      <span>ROC AUC: 0.932</span>
+                    </div>
                   </div>
-                  <h4 className="font-black text-sm uppercase text-neutral-800 mt-2">XGBoost Ensemble</h4>
-                  <p className="text-[10px] text-neutral-400 leading-relaxed font-semibold mt-1">
-                    Cho kết quả chính xác cao đối với dữ liệu phân loại lâm sàng dạng bảng.
-                  </p>
-                  <div className="flex gap-4 mt-3 text-[10px] font-black uppercase text-neutral-700">
-                    <span>Accuracy: 89.0%</span>
-                    <span>ROC AUC: 0.932</span>
-                  </div>
+                  <button
+                    onClick={() => {
+                      setSelectedModelForParams('xgboost');
+                      setParamsModalOpen(true);
+                    }}
+                    className="text-[9px] font-extrabold uppercase tracking-wider text-red-600 hover:text-red-700 mt-4 text-left hover:underline select-none cursor-pointer flex items-center gap-0.5 self-start"
+                  >
+                    Xem siêu tham số <ChevronRight size={10} />
+                  </button>
                 </div>
 
-                <div className="bg-white/50 border border-neutral-200/30 p-4 rounded-xl shadow-sm">
-                  <div className="flex justify-between items-start">
-                    <span className="text-[10px] uppercase text-neutral-600 font-extrabold">Mô hình Phụ</span>
-                    <span className="text-[9px] uppercase font-bold bg-neutral-200 text-neutral-700 px-2 py-0.5 rounded-full">Backup</span>
+                {/* Random Forest Card */}
+                <div className="bg-white/50 border border-neutral-200/30 p-4 rounded-xl shadow-sm flex flex-col justify-between h-full">
+                  <div>
+                    <div className="flex justify-between items-start">
+                      <span className="text-[10px] uppercase text-neutral-600 font-extrabold">Mô hình Phụ</span>
+                      <span className="text-[9px] uppercase font-bold bg-neutral-200 text-neutral-700 px-2 py-0.5 rounded-full">Backup</span>
+                    </div>
+                    <h4 className="font-black text-sm uppercase text-neutral-800 mt-2">Random Forest</h4>
+                    <p className="text-[10px] text-neutral-400 leading-relaxed font-semibold mt-1">
+                      Được sử dụng kiểm chéo để hạn chế hiện tượng quá khớp (overfitting).
+                    </p>
+                    <div className="flex gap-4 mt-3 text-[10px] font-black uppercase text-neutral-700">
+                      <span>Accuracy: 86.4%</span>
+                      <span>ROC AUC: 0.908</span>
+                    </div>
                   </div>
-                  <h4 className="font-black text-sm uppercase text-neutral-800 mt-2">Random Forest</h4>
-                  <p className="text-[10px] text-neutral-400 leading-relaxed font-semibold mt-1">
-                    Được sử dụng kiểm chéo để hạn chế hiện tượng quá khớp (overfitting).
-                  </p>
-                  <div className="flex gap-4 mt-3 text-[10px] font-black uppercase text-neutral-700">
-                    <span>Accuracy: 86.4%</span>
-                    <span>ROC AUC: 0.908</span>
+                  <button
+                    onClick={() => {
+                      setSelectedModelForParams('random_forest');
+                      setParamsModalOpen(true);
+                    }}
+                    className="text-[9px] font-extrabold uppercase tracking-wider text-red-600 hover:text-red-700 mt-4 text-left hover:underline select-none cursor-pointer flex items-center gap-0.5 self-start"
+                  >
+                    Xem siêu tham số <ChevronRight size={10} />
+                  </button>
+                </div>
+
+                {/* Logistic Regression Card */}
+                <div className="bg-white/50 border border-neutral-200/30 p-4 rounded-xl shadow-sm flex flex-col justify-between h-full">
+                  <div>
+                    <div className="flex justify-between items-start">
+                      <span className="text-[10px] uppercase text-neutral-600 font-extrabold">Mô hình Đối chứng</span>
+                      <span className="text-[9px] uppercase font-bold bg-neutral-100 text-neutral-500 px-2 py-0.5 rounded-full">Reference</span>
+                    </div>
+                    <h4 className="font-black text-sm uppercase text-neutral-800 mt-2">Logistic Regression</h4>
+                    <p className="text-[10px] text-neutral-400 leading-relaxed font-semibold mt-1">
+                      Được dùng làm mô hình đối chứng cơ sở để đánh giá khả năng hội tụ.
+                    </p>
+                    <div className="flex gap-4 mt-3 text-[10px] font-black uppercase text-neutral-700">
+                      <span>Accuracy: 84.1%</span>
+                      <span>ROC AUC: 0.885</span>
+                    </div>
                   </div>
+                  <button
+                    onClick={() => {
+                      setSelectedModelForParams('logistic_regression');
+                      setParamsModalOpen(true);
+                    }}
+                    className="text-[9px] font-extrabold uppercase tracking-wider text-red-600 hover:text-red-700 mt-4 text-left hover:underline select-none cursor-pointer flex items-center gap-0.5 self-start"
+                  >
+                    Xem siêu tham số <ChevronRight size={10} />
+                  </button>
                 </div>
               </div>
 
@@ -692,6 +777,12 @@ export default function DashboardPage() {
         </div>
 
       </div>
+
+      <HyperparamsModal
+        isOpen={paramsModalOpen}
+        onClose={() => setParamsModalOpen(false)}
+        modelType={selectedModelForParams}
+      />
 
     </div>
   );
