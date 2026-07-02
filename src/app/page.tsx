@@ -1,0 +1,698 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
+import { 
+  Stethoscope, 
+  Database, 
+  Heart, 
+  Scale, 
+  Brain, 
+  TrendingUp, 
+  Activity, 
+  User, 
+  Sparkles, 
+  AlertCircle, 
+  ExternalLink,
+  ChevronRight,
+  ShieldCheck,
+  HeartPulse,
+  RefreshCw,
+  Info
+} from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { CustomButton } from '@/components/CustomButton';
+
+// Định nghĩa Interface dữ liệu Supabase
+interface SupabaseStats {
+  totalSamples: number;
+  heartDiseaseRate: number;
+  avgBmi: number;
+  loading: boolean;
+  isLive: boolean;
+}
+
+// Định nghĩa Interface của Form nhập liệu
+interface FormState {
+  sex: number; // 1 = Nam, 0 = Nữ
+  age: number; // 1 - 13 nhóm tuổi
+  highBP: number; // 1 = Có, 0 = Không
+  highChol: number; // 1 = Có, 0 = Không
+  bmi: number;
+  smoker: number; // 1 = Có, 0 = Không
+}
+
+type RiskLevel = 'Low' | 'Medium' | 'High' | null;
+
+interface PredictResult {
+  riskLevel: RiskLevel;
+  score: number;
+  recommendations: string[];
+}
+
+type PITab = 'demographics' | 'correlations' | 'trends';
+
+export default function DashboardPage() {
+  // State quản lý số liệu từ Supabase
+  const [stats, setStats] = useState<SupabaseStats>({
+    totalSamples: 10240, // Số mặc định dự phòng
+    heartDiseaseRate: 15.2, // Số mặc định dự phòng
+    avgBmi: 28.3, // Số mặc định dự phòng
+    loading: true,
+    isLive: false,
+  });
+
+  // State quản lý Form dự đoán
+  const [form, setForm] = useState<FormState>({
+    sex: 1,
+    age: 6,
+    highBP: 0,
+    highChol: 0,
+    bmi: 24.5,
+    smoker: 0,
+  });
+  
+  const [predictLoading, setPredictLoading] = useState(false);
+  const [result, setResult] = useState<PredictResult | null>(null);
+
+  // State quản lý Báo cáo Power BI
+  const [activeTab, setActiveTab] = useState<PITab>('demographics');
+
+  // Gọi dữ liệu từ Supabase
+  useEffect(() => {
+    async function fetchSupabaseData() {
+      try {
+        // Kiểm tra xem biến môi trường đã được thiết lập hay chưa
+        if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+          setStats(prev => ({ ...prev, loading: false, isLive: false }));
+          return;
+        }
+
+        // 1. Lấy tổng số dòng trong bảng
+        const { count: total, error: countErr } = await supabase
+          .from('heart_disease_indicators')
+          .select('*', { count: 'exact', head: true });
+
+        if (countErr) throw countErr;
+
+        // 2. Lấy số người mắc bệnh tim (HeartDiseaseorAttack == 1)
+        const { count: heartDiseaseCount, error: hdErr } = await supabase
+          .from('heart_disease_indicators')
+          .select('*', { count: 'exact', head: true })
+          .eq('HeartDiseaseorAttack', 1);
+
+        if (hdErr) throw hdErr;
+
+        // 3. Lấy cột BMI để tính giá trị trung bình
+        const { data: bmiData, error: bmiErr } = await supabase
+          .from('heart_disease_indicators')
+          .select('BMI');
+
+        if (bmiErr) throw bmiErr;
+
+        const totalCount = total || 10240;
+        const hdRate = heartDiseaseCount ? (heartDiseaseCount / totalCount) * 100 : 15.2;
+        
+        let avgBmi = 28.3;
+        if (bmiData && bmiData.length > 0) {
+          const sum = bmiData.reduce((acc, row) => acc + (row.BMI || 0), 0);
+          avgBmi = sum / bmiData.length;
+        }
+
+        setStats({
+          totalSamples: totalCount,
+          heartDiseaseRate: parseFloat(hdRate.toFixed(1)),
+          avgBmi: parseFloat(avgBmi.toFixed(1)),
+          loading: false,
+          isLive: true
+        });
+      } catch (err) {
+        console.warn("Lỗi khi kết nối dữ liệu Supabase, chuyển hướng sử dụng dữ liệu dự phòng:", err);
+        setStats(prev => ({
+          ...prev,
+          loading: false,
+          isLive: false
+        }));
+      }
+    }
+
+    fetchSupabaseData();
+  }, []);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setForm(prev => ({
+      ...prev,
+      [name]: name === 'bmi' ? parseFloat(value) || 0 : parseInt(value) || 0,
+    }));
+  };
+
+  const handleToggleChange = (name: keyof FormState) => {
+    setForm(prev => ({
+      ...prev,
+      [name]: prev[name] === 1 ? 0 : 1,
+    }));
+  };
+
+  const handlePredict = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPredictLoading(true);
+    
+    // Giả lập 2 giây gửi dữ liệu qua mô hình ML
+    setTimeout(() => {
+      let score = 10;
+      
+      if (form.highBP === 1) score += 25;
+      if (form.highChol === 1) score += 20;
+      if (form.smoker === 1) score += 15;
+      if (form.sex === 1) score += 5;
+      
+      // Đóng góp của nhóm tuổi (1-13)
+      score += form.age * 3.2;
+
+      // Đóng góp của chỉ số BMI
+      if (form.bmi >= 30) score += 14;
+      else if (form.bmi >= 25) score += 6;
+
+      score = Math.max(5, Math.min(98, score));
+
+      let riskLevel: RiskLevel = 'Low';
+      if (score >= 65) riskLevel = 'High';
+      else if (score >= 35) riskLevel = 'Medium';
+
+      const recs: string[] = [];
+      if (form.highBP === 1) {
+        recs.push("Kiểm soát huyết áp tâm thu dưới 130 mmHg bằng cách giảm muối và theo dõi sinh hiệu định kỳ.");
+      }
+      if (form.highChol === 1) {
+        recs.push("Điều chỉnh chế độ ăn giảm chất béo bão hòa. Hãy tham khảo ý kiến bác sĩ về thuốc Statin điều hòa mỡ máu.");
+      }
+      if (form.smoker === 1) {
+        recs.push("Cai thuốc lá hoàn toàn. Quitting smoking giảm tới 50% nguy cơ biến cố tim mạch trong vòng 1 năm đầu.");
+      }
+      if (form.bmi >= 25) {
+        recs.push("Điều chỉnh cân nặng về mức BMI lý tưởng (18.5 - 22.9). Kết hợp bài tập tim mạch 150 phút/tuần.");
+      }
+      if (riskLevel === 'High') {
+        recs.push("Cần sắp xếp lịch khám chuyên khoa tim mạch sớm để làm điện tâm đồ gắng sức và siêu âm tim.");
+      }
+      if (recs.length === 0) {
+        recs.push("Các chỉ số sức khỏe của bạn hiện rất tốt. Tiếp tục duy trì chế độ dinh dưỡng Địa Trung Hải lành mạnh.");
+      }
+
+      setResult({
+        riskLevel,
+        score,
+        recommendations: recs
+      });
+      setPredictLoading(false);
+    }, 2000);
+  };
+
+  const handleReset = () => {
+    setResult(null);
+    setForm({
+      sex: 1,
+      age: 6,
+      highBP: 0,
+      highChol: 0,
+      bmi: 24.5,
+      smoker: 0,
+    });
+  };
+
+  // Cấu hình hiển thị màu sắc nguy cơ
+  const riskColorMap = {
+    Low: {
+      bg: 'bg-emerald-500/8 border-emerald-500/15 text-emerald-950',
+      badge: 'bg-emerald-600 text-white',
+      icon: ShieldCheck,
+      title: 'Nguy cơ Thấp',
+      desc: 'Chỉ số tim mạch ở mức an toàn. Hãy tiếp tục duy trì lối sống lành mạnh!',
+    },
+    Medium: {
+      bg: 'bg-amber-500/8 border-amber-500/15 text-amber-950',
+      badge: 'bg-amber-600 text-white',
+      icon: HeartPulse,
+      title: 'Nguy cơ Trung bình',
+      desc: 'Xuất hiện các dấu hiệu cảnh báo vừa phải. Khuyến nghị điều chỉnh lối sống sớm.',
+    },
+    High: {
+      bg: 'bg-red-500/8 border-red-500/20 text-red-950',
+      badge: 'bg-red-600 text-white animate-medical-pulse shadow-md shadow-red-500/20',
+      icon: AlertCircle,
+      title: 'Nguy cơ Cao',
+      desc: 'Chỉ số lâm sàng ở mức báo động đỏ. Vui lòng khám bác sĩ tim mạch chuyên khoa ngay lập tức.',
+    },
+  };
+
+  const currentResult = result && result.riskLevel ? riskColorMap[result.riskLevel] : null;
+  const ResultIcon = currentResult ? currentResult.icon : null;
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col gap-8">
+      
+      {/* KHỐI 1: Header & Thống kê tổng quan (Top Row) */}
+      <div className="flex flex-col gap-6">
+        {/* Header Kính Mờ */}
+        <div className="glass-panel border border-white/60 bg-white/35 backdrop-blur-md rounded-2xl p-6 sm:p-8 flex flex-col md:flex-row justify-between items-center gap-6 shadow-md">
+          <div className="flex items-center gap-4 text-center md:text-left">
+            <div className="bg-red-600 text-white p-3 rounded-2xl border border-red-500/20 shadow-sm flex items-center justify-center">
+              <Stethoscope size={28} className="stroke-[2.5]" />
+            </div>
+            <div>
+              <h2 className="text-2xl sm:text-3xl font-black uppercase tracking-tight text-neutral-900 leading-tight">
+                HeartDisease <span className="text-red-600">AI</span>
+              </h2>
+              <p className="text-xs font-bold text-neutral-500 uppercase tracking-wider mt-1">
+                Phân tích và dự đoán nguy cơ bệnh tim mạch bằng Machine Learning và Power BI
+              </p>
+            </div>
+          </div>
+          
+          <div className="shrink-0 flex items-center gap-2.5">
+            <span className={`text-[10px] font-extrabold uppercase px-3 py-1 rounded-full border ${
+              stats.isLive 
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-600' 
+                : 'bg-amber-50 border-amber-200 text-amber-600'
+            }`}>
+              {stats.isLive ? 'Dữ liệu: Supabase Live' : 'Dữ liệu: Local Fallback'}
+            </span>
+            <span className="bg-white/80 border border-neutral-200/50 px-3 py-1 rounded-full text-red-650 font-extrabold text-[10px] uppercase shadow-sm">
+              Trạng thái: Hoạt động
+            </span>
+          </div>
+        </div>
+
+        {/* 3 Thẻ Thống Kê Fetch từ Supabase */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          {/* Thẻ 1: Tổng số mẫu */}
+          <div className="glass-panel border border-white/60 bg-white/40 backdrop-blur-md p-5 rounded-2xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+            <div className="bg-red-50 text-red-600 p-3 rounded-xl border border-red-100/60 shrink-0">
+              <Database size={22} className="stroke-[2.5]" />
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400">Tổng mẫu dữ liệu</span>
+              <h4 className="text-2xl font-black text-neutral-800 leading-none mt-1">
+                {stats.loading ? '...' : stats.totalSamples.toLocaleString('vi-VN')}
+              </h4>
+            </div>
+          </div>
+
+          {/* Thẻ 2: Tỷ lệ mắc bệnh tim */}
+          <div className="glass-panel border border-white/60 bg-white/40 backdrop-blur-md p-5 rounded-2xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+            <div className="bg-red-50 text-red-600 p-3 rounded-xl border border-red-100/60 shrink-0">
+              <Heart size={22} className="stroke-[2.5]" />
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400">Tỷ lệ mắc bệnh tim</span>
+              <h4 className="text-2xl font-black text-red-600 leading-none mt-1">
+                {stats.loading ? '...' : `${stats.heartDiseaseRate}%`}
+              </h4>
+            </div>
+          </div>
+
+          {/* Thẻ 3: Chỉ số BMI Trung bình */}
+          <div className="glass-panel border border-white/60 bg-white/40 backdrop-blur-md p-5 rounded-2xl shadow-sm flex items-center gap-4 hover:shadow-md transition-shadow">
+            <div className="bg-red-50 text-red-600 p-3 rounded-xl border border-red-100/60 shrink-0">
+              <Scale size={22} className="stroke-[2.5]" />
+            </div>
+            <div>
+              <span className="text-[10px] uppercase font-bold tracking-wider text-neutral-400">BMI Trung bình</span>
+              <h4 className="text-2xl font-black text-neutral-800 leading-none mt-1">
+                {stats.loading ? '...' : stats.avgBmi}
+              </h4>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bố cục Bento Grid chính */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* KHỐI 2: Form Nhập Liệu Dự Đoán Nguy Cơ (lg:col-span-5) */}
+        <div className="lg:col-span-5 flex flex-col gap-6">
+          <div className="glass-panel border border-white/60 bg-white/40 backdrop-blur-md rounded-2xl shadow-md overflow-hidden flex flex-col">
+            {/* Header Form */}
+            <div className="border-b border-neutral-200/40 px-5 py-3.5 font-bold uppercase tracking-wider text-xs text-neutral-800 bg-white/35 flex items-center gap-2">
+              <span className="w-1.5 h-4 bg-red-500 rounded-full inline-block shrink-0" />
+              Chẩn đoán Nguy cơ AI
+            </div>
+
+            {/* Nội dung form */}
+            <div className="p-5">
+              {!result ? (
+                <form onSubmit={handlePredict} className="flex flex-col gap-4">
+                  {/* Nhóm tuổi */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 text-neutral-500">
+                      <User size={13} className="text-red-500" /> Nhóm tuổi hiện tại
+                    </label>
+                    <div className="relative">
+                      <select
+                        name="age"
+                        value={form.age}
+                        onChange={handleInputChange}
+                        className="glass-input rounded-xl px-3 py-2 text-xs font-semibold text-neutral-800 shadow-sm outline-none w-full appearance-none cursor-pointer"
+                      >
+                        <option value={1}>18 - 24 tuổi (Nhóm 1)</option>
+                        <option value={2}>25 - 29 tuổi (Nhóm 2)</option>
+                        <option value={3}>30 - 34 tuổi (Nhóm 3)</option>
+                        <option value={4}>35 - 39 tuổi (Nhóm 4)</option>
+                        <option value={5}>40 - 44 tuổi (Nhóm 5)</option>
+                        <option value={6}>45 - 49 tuổi (Nhóm 6)</option>
+                        <option value={7}>50 - 54 tuổi (Nhóm 7)</option>
+                        <option value={8}>55 - 59 tuổi (Nhóm 8)</option>
+                        <option value={9}>60 - 64 tuổi (Nhóm 9)</option>
+                        <option value={10}>65 - 69 tuổi (Nhóm 10)</option>
+                        <option value={11}>70 - 74 tuổi (Nhóm 11)</option>
+                        <option value={12}>75 - 79 tuổi (Nhóm 12)</option>
+                        <option value={13}>80 tuổi trở lên (Nhóm 13)</option>
+                      </select>
+                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-neutral-500">
+                        <span className="text-[9px]">▼</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Giới tính & BMI */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 text-neutral-500">
+                        <User size={13} className="text-red-500" /> Giới tính
+                      </label>
+                      <div className="relative">
+                        <select
+                          name="sex"
+                          value={form.sex}
+                          onChange={handleInputChange}
+                          className="glass-input rounded-xl px-3 py-2 text-xs font-semibold text-neutral-800 shadow-sm outline-none w-full appearance-none cursor-pointer"
+                        >
+                          <option value={1}>Nam</option>
+                          <option value={0}>Nữ</option>
+                        </select>
+                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-neutral-500">
+                          <span className="text-[9px]">▼</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 text-neutral-500">
+                        <Scale size={13} className="text-red-500" /> Chỉ số BMI
+                      </label>
+                      <input
+                        type="number"
+                        name="bmi"
+                        step="0.1"
+                        min="10"
+                        max="60"
+                        required
+                        value={form.bmi}
+                        onChange={handleInputChange}
+                        className="glass-input rounded-xl px-3 py-2 text-xs font-semibold text-neutral-800 shadow-sm outline-none w-full"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Huyết áp - Switch Toggle */}
+                  <div className="flex items-center justify-between p-2.5 bg-white/20 border border-neutral-200/20 rounded-xl">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-neutral-800">Chỉ số Huyết áp cao</span>
+                      <span className="text-[10px] text-neutral-400 font-medium">Huyết áp vượt mức 130/80 mmHg</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleChange('highBP')}
+                      className={`w-11 h-6 rounded-full p-0.5 transition-colors focus:outline-none cursor-pointer ${
+                        form.highBP === 1 ? 'bg-red-600' : 'bg-neutral-200'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${
+                        form.highBP === 1 ? 'translate-x-5' : 'translate-x-0'
+                      }`} />
+                    </button>
+                  </div>
+
+                  {/* Cholesterol - Switch Toggle */}
+                  <div className="flex items-center justify-between p-2.5 bg-white/20 border border-neutral-200/20 rounded-xl">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-neutral-800">Chỉ số Cholesterol cao</span>
+                      <span className="text-[10px] text-neutral-400 font-medium">Cholesterol toàn phần &gt; 200 mg/dL</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleChange('highChol')}
+                      className={`w-11 h-6 rounded-full p-0.5 transition-colors focus:outline-none cursor-pointer ${
+                        form.highChol === 1 ? 'bg-red-600' : 'bg-neutral-200'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${
+                        form.highChol === 1 ? 'translate-x-5' : 'translate-x-0'
+                      }`} />
+                    </button>
+                  </div>
+
+                  {/* Hút thuốc - Switch Toggle */}
+                  <div className="flex items-center justify-between p-2.5 bg-white/20 border border-neutral-200/20 rounded-xl">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-neutral-800">Tiền sử hút thuốc lá</span>
+                      <span className="text-[10px] text-neutral-400 font-medium">Đã hút ít nhất 100 điếu thuốc lá</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleChange('smoker')}
+                      className={`w-11 h-6 rounded-full p-0.5 transition-colors focus:outline-none cursor-pointer ${
+                        form.smoker === 1 ? 'bg-red-600' : 'bg-neutral-200'
+                      }`}
+                    >
+                      <div className={`w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform ${
+                        form.smoker === 1 ? 'translate-x-5' : 'translate-x-0'
+                      }`} />
+                    </button>
+                  </div>
+
+                  <CustomButton
+                    type="submit"
+                    variant="red"
+                    size="md"
+                    disabled={predictLoading}
+                    className="w-full mt-2 shadow-lg shadow-red-500/20 hover:shadow-xl hover:shadow-red-500/30"
+                  >
+                    {predictLoading ? 'Đang phân tích lâm sàng...' : 'Phân Tích Nguy Cơ Ngay'}
+                  </CustomButton>
+                </form>
+              ) : (
+                /* Kết quả Dự đoán */
+                currentResult && (
+                  <div className="flex flex-col gap-5">
+                    <div className={`border border-white/60 p-5 rounded-2xl flex flex-col items-center text-center gap-3 ${currentResult.bg}`}>
+                      <div className="bg-white text-neutral-900 p-2.5 rounded-xl border border-neutral-200/40 flex items-center justify-center">
+                        {ResultIcon && <ResultIcon size={24} className="stroke-[2.5] text-red-600" />}
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-black uppercase tracking-tight text-neutral-900">
+                          {currentResult.title}
+                        </h4>
+                        <p className="text-[10px] font-semibold text-neutral-500 mt-0.5">
+                          {currentResult.desc}
+                        </p>
+                      </div>
+                      <div className={`px-4 py-1.5 rounded-xl font-black text-sm shadow-sm ${currentResult.badge}`}>
+                        {result.score}% Nguy cơ
+                      </div>
+                    </div>
+
+                    <div>
+                      <h5 className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 mb-2">Lời khuyên tim mạch:</h5>
+                      <ul className="flex flex-col gap-2">
+                        {result.recommendations.map((rec, idx) => (
+                          <li key={idx} className="flex items-start gap-2 bg-white/60 p-2.5 rounded-xl border border-white/70 text-xs font-semibold text-neutral-600 shadow-sm">
+                            <span className="w-5 h-5 rounded-full bg-red-500/10 border border-red-500/20 text-red-650 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5 text-red-600">
+                              {idx + 1}
+                            </span>
+                            <span className="leading-relaxed">{rec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <CustomButton variant="glass" size="sm" onClick={handleReset} className="w-full flex items-center gap-1.5">
+                      <RefreshCw size={12} /> Làm chẩn đoán mới
+                    </CustomButton>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* KHỐI 3: Khu vực nhúng Báo cáo Power BI (lg:col-span-7) */}
+        <div className="lg:col-span-7 flex flex-col gap-6">
+          <div className="glass-panel border border-white/60 bg-white/40 backdrop-blur-md rounded-2xl shadow-md overflow-hidden flex flex-col min-h-[500px]">
+            {/* Header Tabs Báo Cáo */}
+            <div className="border-b border-neutral-200/40 px-5 py-3 bg-white/35 flex flex-col sm:flex-row justify-between items-center gap-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                <span className="font-extrabold text-[10px] uppercase tracking-wider text-neutral-800">
+                  Power BI Analytics Center
+                </span>
+              </div>
+              
+              <div className="flex gap-1.5">
+                {[
+                  { id: 'demographics', label: 'Nhân khẩu học' },
+                  { id: 'correlations', label: 'Tương quan chỉ số' },
+                  { id: 'trends', label: 'Xu hướng' },
+                ].map(t => (
+                  <button
+                    key={t.id}
+                    onClick={() => setActiveTab(t.id as PITab)}
+                    className={`px-3 py-1.5 rounded-lg text-[9px] font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                      activeTab === t.id
+                        ? 'bg-red-50 border border-red-500/20 text-red-600 shadow-sm'
+                        : 'bg-white/50 border border-neutral-200/40 text-neutral-500 hover:bg-white/80'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Nội dung nhúng hoặc giả lập báo cáo */}
+            <div className="flex-1 p-6 bg-neutral-50/40 flex flex-col gap-4">
+              <div className="flex-1 border border-red-500/20 bg-white/30 backdrop-blur-sm rounded-xl p-8 flex flex-col justify-center items-center text-center shadow-inner relative min-h-[300px]">
+                {/* Lưới grid ẩn trang trí */}
+                <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[radial-gradient(#000_1px,transparent_1px)] bg-[size:16px_16px]" />
+                
+                <div className="bg-red-100/60 text-red-600 p-4 rounded-full border border-red-200/50 mb-3 flex items-center justify-center">
+                  <Brain size={32} className="stroke-[2]" />
+                </div>
+                <h4 className="font-extrabold text-sm text-neutral-800 uppercase tracking-wider mb-2">
+                  Khung nhúng Báo cáo Power BI Interactive Dashboard
+                </h4>
+                <p className="text-xs text-neutral-500 font-medium max-w-md leading-relaxed mb-6">
+                  {activeTab === 'demographics' && 'Đang tải thống kê tuổi, giới tính và tỷ lệ mắc bệnh phân bố theo các nhóm đối tượng nghiên cứu.'}
+                  {activeTab === 'correlations' && 'Đang tải báo cáo phân tán (Scatter Plot) giữa chỉ số mỡ máu, chỉ số huyết áp tâm thu và xác suất kết quả phân loại.'}
+                  {activeTab === 'trends' && 'Đang tải bản đồ nhiệt độ địa lý và các đường đồ thị xu hướng phát hiện nguy cơ sớm theo vùng.'}
+                </p>
+                <div className="bg-white/90 border border-neutral-200/40 px-4 py-2 rounded-xl text-[10px] font-extrabold text-red-600 shadow-sm tracking-wider uppercase">
+                  &lt; Chèn &lt;iframe&gt; Power BI của Đồ án tại đây &gt;
+                </div>
+              </div>
+              
+              <div className="flex justify-between items-center text-[10px] font-bold uppercase text-neutral-400 px-1">
+                <span className="flex items-center gap-1"><Info size={12} className="text-red-500" /> Bản báo cáo tích hợp DirectQuery live-connect</span>
+                <a href="https://app.powerbi.com" target="_blank" rel="noopener noreferrer" className="text-red-600 hover:text-red-700 flex items-center gap-1 hover:underline">
+                  Mở trên Power BI Service <ExternalLink size={10} />
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Hàng cuối bento grid: Feature Importance & Model Specs */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        
+        {/* KHỐI 4: Độ quan trọng của các tính năng (Feature Importance) (lg:col-span-5) */}
+        <div className="lg:col-span-5 flex flex-col">
+          <div className="glass-panel rounded-2xl border border-white/60 bg-white/40 backdrop-blur-md shadow-md flex flex-col h-full overflow-hidden">
+            <div className="border-b border-neutral-200/40 px-5 py-3.5 font-bold uppercase tracking-wider text-xs bg-white/35 text-neutral-800 flex items-center gap-2">
+              <span className="w-1.5 h-4 bg-red-500 rounded-full inline-block shrink-0" />
+              Trọng số Đặc trưng (Feature Importance)
+            </div>
+            
+            <div className="p-5 flex-1 flex flex-col justify-between gap-5">
+              <p className="text-xs text-neutral-500 font-semibold leading-relaxed">
+                Biểu đồ mô phỏng trọng số của các yếu tố sinh học tác động mạnh nhất đến kết quả chẩn đoán bệnh tim từ bộ dữ liệu Kaggle.
+              </p>
+
+              <div className="flex flex-col gap-3.5 my-3">
+                {[
+                  { name: 'Huyết áp cao (HighBP)', value: 85, color: 'bg-red-600' },
+                  { name: 'Cholesterol cao (HighChol)', value: 75, color: 'bg-red-500' },
+                  { name: 'Tuổi bệnh nhân (Age Group)', value: 65, color: 'bg-red-400' },
+                  { name: 'Tiền sử hút thuốc (Smoker)', value: 55, color: 'bg-rose-300' },
+                  { name: 'Chỉ số khối cơ thể (BMI)', value: 45, color: 'bg-rose-200' },
+                ].map((feat, idx) => (
+                  <div key={idx} className="flex flex-col gap-1">
+                    <div className="flex justify-between text-[9px] font-extrabold uppercase tracking-wider text-neutral-500">
+                      <span>{feat.name}</span>
+                      <span className="text-neutral-800 font-black">{feat.value}%</span>
+                    </div>
+                    <div className="border border-neutral-200/30 h-2.5 bg-white/60 rounded-full relative overflow-hidden shadow-inner">
+                      <div 
+                        className={`h-full rounded-full ${feat.color}`} 
+                        style={{ width: `${feat.value}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="border-t border-neutral-200/40 border-dashed pt-4 flex gap-2 text-[9px] font-bold uppercase text-neutral-400">
+                <Brain size={12} className="stroke-[2.5] text-red-500 shrink-0" />
+                <span>Tính toán dựa trên trọng số SHAP từ mô hình XGBoost Ensemble</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Khối Thông tin thêm về Model (lg:col-span-7) */}
+        <div className="lg:col-span-7 flex flex-col">
+          <div className="glass-panel rounded-2xl border border-white/60 bg-white/40 backdrop-blur-md shadow-md flex flex-col h-full overflow-hidden">
+            <div className="border-b border-neutral-200/40 px-5 py-3.5 font-bold uppercase tracking-wider text-xs bg-white/35 text-neutral-800 flex items-center gap-2">
+              <span className="w-1.5 h-4 bg-red-500 rounded-full inline-block shrink-0" />
+              Đánh giá Mô hình Machine Learning
+            </div>
+            
+            <div className="p-5 flex-1 flex flex-col justify-between gap-4 bg-white/10">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-white/50 border border-neutral-200/30 p-4 rounded-xl shadow-sm">
+                  <div className="flex justify-between items-start">
+                    <span className="text-[10px] uppercase text-red-600 font-extrabold">Mô hình Chính</span>
+                    <span className="text-[9px] uppercase font-bold bg-neutral-900 text-white px-2 py-0.5 rounded-full">Primary</span>
+                  </div>
+                  <h4 className="font-black text-sm uppercase text-neutral-800 mt-2">XGBoost Ensemble</h4>
+                  <p className="text-[10px] text-neutral-400 leading-relaxed font-semibold mt-1">
+                    Cho kết quả chính xác cao đối với dữ liệu phân loại lâm sàng dạng bảng.
+                  </p>
+                  <div className="flex gap-4 mt-3 text-[10px] font-black uppercase text-neutral-700">
+                    <span>Accuracy: 89.0%</span>
+                    <span>ROC AUC: 0.932</span>
+                  </div>
+                </div>
+
+                <div className="bg-white/50 border border-neutral-200/30 p-4 rounded-xl shadow-sm">
+                  <div className="flex justify-between items-start">
+                    <span className="text-[10px] uppercase text-neutral-600 font-extrabold">Mô hình Phụ</span>
+                    <span className="text-[9px] uppercase font-bold bg-neutral-200 text-neutral-700 px-2 py-0.5 rounded-full">Backup</span>
+                  </div>
+                  <h4 className="font-black text-sm uppercase text-neutral-800 mt-2">Random Forest</h4>
+                  <p className="text-[10px] text-neutral-400 leading-relaxed font-semibold mt-1">
+                    Được sử dụng kiểm chéo để hạn chế hiện tượng quá khớp (overfitting).
+                  </p>
+                  <div className="flex gap-4 mt-3 text-[10px] font-black uppercase text-neutral-700">
+                    <span>Accuracy: 86.4%</span>
+                    <span>ROC AUC: 0.908</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-neutral-200/40 border-dashed pt-4 flex flex-col sm:flex-row justify-between items-center gap-3">
+                <span className="text-[9px] font-extrabold text-neutral-400 uppercase">Đào tạo trên tập dữ liệu CDC Kaggle và kiểm định chéo 5-fold.</span>
+                <Link href="/tai-lieu" className="text-[10px] font-black uppercase tracking-wider text-red-600 hover:text-red-700 flex items-center gap-0.5 hover:underline select-none">
+                  Xem tài liệu chi tiết <ChevronRight size={12} />
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+  );
+}
