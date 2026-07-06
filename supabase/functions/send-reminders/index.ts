@@ -16,6 +16,8 @@ serve(async (req) => {
     const secret = url.searchParams.get('secret')
     const expectedSecret = Deno.env.get('CRON_SECRET')
 
+    console.log(`[Bảo mật] Nhận yêu cầu kích hoạt Cron...`)
+
     if (!secret || secret !== expectedSecret) {
       console.warn('[Edge Function] Cảnh báo: Truy cập trái phép bị chặn.')
       return new Response(JSON.stringify({ error: 'Unauthorized access' }), {
