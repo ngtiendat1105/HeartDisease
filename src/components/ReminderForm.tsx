@@ -24,7 +24,7 @@ export const ReminderForm: React.FC = () => {
           telegramChatId,
           reminderType,
           content,
-          remindAt,
+          remindAt: new Date(remindAt).toISOString(),
         }),
       });
 
@@ -54,7 +54,7 @@ export const ReminderForm: React.FC = () => {
   };
 
   return (
-    <div className="glass-panel border border-white/60 bg-white/40 backdrop-blur-md rounded-2xl shadow-xl p-6 flex flex-col gap-5 w-full">
+    <div className="glass-panel border border-white/60 bg-white/40 backdrop-blur-md rounded-2xl shadow-xl p-6 flex flex-col gap-5 w-full h-full">
       <div className="flex items-center gap-2.5 pb-3 border-b border-neutral-200/40">
         <div className="bg-red-50 text-red-650 p-2.5 rounded-xl border border-red-100/60 shadow-sm flex items-center justify-center bg-red-600/5 text-red-600">
           <BellRing size={20} className="stroke-[2.2]" />
@@ -84,7 +84,8 @@ export const ReminderForm: React.FC = () => {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4 flex-1 justify-between">
+        <div className="flex flex-col gap-4">
         {/* Telegram Chat ID */}
         <div className="flex flex-col gap-1.5">
           <label className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 text-neutral-500">
@@ -166,12 +167,13 @@ export const ReminderForm: React.FC = () => {
             className="glass-input rounded-xl px-3 py-2.5 text-xs font-semibold text-neutral-800 shadow-sm outline-none w-full cursor-pointer"
           />
         </div>
+        </div>
 
         {/* Submit */}
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full bg-red-600 text-white font-bold py-2.5 rounded-xl transition-all shadow-md shadow-red-500/20 hover:shadow-lg hover:shadow-red-500/35 flex items-center justify-center gap-2 cursor-pointer text-xs select-none disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full bg-red-600 text-white font-bold py-2.5 rounded-xl transition-all shadow-md shadow-red-500/20 hover:shadow-lg hover:shadow-red-500/35 flex items-center justify-center gap-2 cursor-pointer text-xs select-none disabled:opacity-50 disabled:cursor-not-allowed mt-4"
         >
           <Send size={14} /> {isLoading ? 'Đang thiết lập...' : 'Đặt lịch nhắc nhở'}
         </button>

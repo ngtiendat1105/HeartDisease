@@ -369,8 +369,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Bố cục Bento Grid chính */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* KHỐI 2: Form Nhập Liệu Dự Đoán Nguy Cơ (lg:col-span-5) */}
         <div className="lg:col-span-5 flex flex-col gap-6">
@@ -601,7 +600,9 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
-          <ReminderForm />
+          <div className="flex-1 flex">
+            <ReminderForm />
+          </div>
         </div>
 
         {/* KHỐI 3: Khu vực nhúng Báo cáo Power BI (lg:col-span-7) */}
