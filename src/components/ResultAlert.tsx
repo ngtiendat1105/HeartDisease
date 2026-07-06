@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AlertTriangle, ShieldCheck, HeartPulse, RefreshCw, FileDown, Stethoscope } from 'lucide-react';
 import { CustomButton } from './CustomButton';
 import html2canvas from 'html2canvas';
@@ -32,6 +32,13 @@ export const ResultAlert: React.FC<ResultAlertProps> = ({
   recommendations,
   form,
 }) => {
+  const [reportId, setReportId] = useState('');
+  const [reportDate, setReportDate] = useState('');
+
+  useEffect(() => {
+    setReportId(`HD-${Math.floor(100000 + Math.random() * 900000)}`);
+    setReportDate(new Date().toLocaleString('vi-VN'));
+  }, []);
   const colorMap = {
     Low: {
       bg: 'bg-emerald-500/8 border-emerald-500/15 text-emerald-950',
@@ -191,8 +198,8 @@ export const ResultAlert: React.FC<ResultAlertProps> = ({
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-bold text-neutral-400 uppercase">Mã báo cáo: HD-{Math.floor(100000 + Math.random() * 900000)}</p>
-                <p className="text-[10px] font-bold text-neutral-500 mt-1">Ngày lập: {new Date().toLocaleString('vi-VN')}</p>
+                <p className="text-[10px] font-bold text-neutral-400 uppercase">Mã báo cáo: {reportId}</p>
+                <p className="text-[10px] font-bold text-neutral-500 mt-1">Ngày lập: {reportDate}</p>
               </div>
             </div>
 

@@ -26,6 +26,7 @@ import { CustomButton } from '@/components/CustomButton';
 import { HyperparamsModal } from '@/components/HyperparamsModal';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { ReminderForm } from '@/components/ReminderForm';
 
 // Định nghĩa Interface dữ liệu Supabase
 interface SupabaseStats {
@@ -82,6 +83,15 @@ export default function DashboardPage() {
   const [modelType, setModelType] = useState<'xgboost' | 'random_forest' | 'logistic_regression'>('xgboost');
   const [paramsModalOpen, setParamsModalOpen] = useState(false);
   const [selectedModelForParams, setSelectedModelForParams] = useState<'xgboost' | 'random_forest' | 'logistic_regression' | null>(null);
+  const [reportId, setReportId] = useState('');
+  const [reportDate, setReportDate] = useState('');
+
+  useEffect(() => {
+    if (result) {
+      setReportId(`HD-${Math.floor(100000 + Math.random() * 900000)}`);
+      setReportDate(new Date().toLocaleString('vi-VN'));
+    }
+  }, [result]);
 
   // State quản lý Báo cáo Power BI
   const [activeTab, setActiveTab] = useState<PITab>('demographics');
@@ -591,6 +601,7 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+          <ReminderForm />
         </div>
 
         {/* KHỐI 3: Khu vực nhúng Báo cáo Power BI (lg:col-span-7) */}
@@ -841,8 +852,8 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-bold text-neutral-400 uppercase">Mã báo cáo: HD-{Math.floor(100000 + Math.random() * 900000)}</p>
-                <p className="text-[10px] font-bold text-neutral-500 mt-1">Ngày lập: {new Date().toLocaleString('vi-VN')}</p>
+                <p className="text-[10px] font-bold text-neutral-400 uppercase">Mã báo cáo: {reportId}</p>
+                <p className="text-[10px] font-bold text-neutral-500 mt-1">Ngày lập: {reportDate}</p>
               </div>
             </div>
 
