@@ -10,9 +10,20 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
 export async function GET(req: Request) {
   try {
-    const now = new Date().toISOString();
+    // 1. Kiểm tra bảo mật từ Vercel Cron Header ở Production
+    const authHeader = req.headers.get('Authorization');
+    if (process.env.NODE_ENV === 'production' && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+      console.warn('[Vercel Cron] Cảnh báo: Cố gắng truy cập trái phép bị từ chối.');
+      return new Response(JSON.stringify({ error: 'Unauthorized access' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-    // 1. Truy vấn các bản ghi chưa gửi và đến hạn nhắc (remind_at <= now)
+    const now = new Date().toISOString();
+    console.log(`[Vercel Cron] Bắt đầu quét lịch nhắc nhở y tế lúc: ${now}`);
+
+    // 2. Truy vấn các bản ghi chưa gửi và đến hạn nhắc (remind_at <= now)
     const { data: reminders, error: selectError } = await supabaseAdmin
       .from('reminders')
       .select('*')
@@ -20,9 +31,11 @@ export async function GET(req: Request) {
       .lte('remind_at', now);
 
     if (selectError) {
-      console.error('Lỗi truy vấn reminders đến hạn từ Supabase:', selectError);
+      console.error('[Vercel Cron] Lỗi truy vấn reminders đến hạn từ Supabase:', selectError);
       throw selectError;
     }
+
+    console.log(`[Vercel Cron] Phát hiện ${reminders?.length || 0} nhắc nhở cần gửi đi.`);
 
     if (!reminders || reminders.length === 0) {
       return NextResponse.json({ success: true, message: 'Không có lịch nhắc nhở nào cần xử lý.' });
@@ -30,13 +43,13 @@ export async function GET(req: Request) {
 
     const botToken = process.env.TELEGRAM_BOT_TOKEN;
     if (!botToken) {
-      console.error('Không tìm thấy cấu hình TELEGRAM_BOT_TOKEN.');
+      console.error('[Vercel Cron] Lỗi cấu hình: Không tìm thấy TELEGRAM_BOT_TOKEN.');
       return NextResponse.json({ error: 'Cấu hình Telegram Bot chưa được thiết lập.' }, { status: 500 });
     }
 
     const processedResults = [];
 
-    // 2. Lặp qua từng nhắc nhở và gửi tin nhắn qua Telegram Bot API
+    // 3. Lặp qua từng nhắc nhở và gửi tin nhắn qua Telegram Bot API
     for (const reminder of reminders) {
       const dateFormatted = new Date(reminder.remind_at).toLocaleString('vi-VN', {
         timeZone: 'Asia/Ho_Chi_Minh',
@@ -77,32 +90,34 @@ export async function GET(req: Request) {
         const resData = await response.json();
 
         if (!response.ok || !resData.ok) {
-          console.error(`Gửi Telegram thất bại cho chat_id ${reminder.telegram_chat_id}:`, resData);
+          console.error(`[Vercel Cron] Gửi Telegram thất bại cho chat_id ${reminder.telegram_chat_id}:`, resData);
           processedResults.push({ id: reminder.id, status: 'failed', error: resData });
           continue;
         }
 
-        // 3. Đánh dấu is_sent = true để tránh gửi lặp lại
+        // 4. Đánh dấu is_sent = true để tránh gửi lặp lại
         const { error: updateError } = await supabaseAdmin
           .from('reminders')
           .update({ is_sent: true })
           .eq('id', reminder.id);
 
         if (updateError) {
-          console.error(`Lỗi cập nhật trạng thái is_sent cho ID ${reminder.id}:`, updateError);
+          console.error(`[Vercel Cron] Lỗi cập nhật trạng thái is_sent cho ID ${reminder.id}:`, updateError);
           processedResults.push({ id: reminder.id, status: 'telegram_sent_but_db_update_failed', error: updateError });
         } else {
+          console.log(`[Vercel Cron] Gửi thành công nhắc nhở ID ${reminder.id} đến Telegram chat_id ${reminder.telegram_chat_id}`);
           processedResults.push({ id: reminder.id, status: 'success' });
         }
       } catch (sendErr: any) {
-        console.error(`Lỗi khi gọi API Telegram cho reminder ${reminder.id}:`, sendErr);
+        console.error(`[Vercel Cron] Lỗi khi gọi API Telegram cho reminder ${reminder.id}:`, sendErr);
         processedResults.push({ id: reminder.id, status: 'error', error: sendErr.message });
       }
     }
 
+    console.log(`[Vercel Cron] Hoàn thành xử lý. Kết quả chi tiết:`, processedResults);
     return NextResponse.json({ success: true, processed: processedResults });
   } catch (error: any) {
-    console.error('Lỗi API Cron Job GET:', error);
+    console.error('[Vercel Cron] Lỗi hệ thống API Cron Job:', error);
     return NextResponse.json(
       { error: 'Đã xảy ra lỗi hệ thống khi xử lý gửi nhắc nhở: ' + error.message },
       { status: 500 }

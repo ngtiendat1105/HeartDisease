@@ -716,10 +716,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Khối Thông tin thêm về Model (lg:col-span-7) */}
-        <div className="lg:col-span-7 flex flex-col">
+          {/* Khối Đánh giá mô hình ML di chuyển vào cột bên phải */}
           <div className="glass-panel rounded-2xl border border-white/60 bg-white/40 backdrop-blur-md shadow-md flex flex-col h-full overflow-hidden">
             <div className="border-b border-neutral-200/40 px-5 py-3.5 font-bold uppercase tracking-wider text-xs bg-white/35 text-neutral-800 flex items-center gap-2">
               <span className="w-1.5 h-4 bg-red-500 rounded-full inline-block shrink-0" />
