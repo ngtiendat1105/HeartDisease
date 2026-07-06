@@ -605,9 +605,10 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* KHỐI 3: Khu vực nhúng Báo cáo Power BI (lg:col-span-7) */}
+        {/* KHỐI 3: Cột bên phải (lg:col-span-7 flex flex-col gap-6) */}
         <div className="lg:col-span-7 flex flex-col gap-6">
-          <div className="glass-panel border border-white/60 bg-white/40 backdrop-blur-md rounded-2xl shadow-md overflow-hidden flex flex-col min-h-[500px]">
+          {/* Component 3: Power BI Analytics Center */}
+          <div className="glass-panel border border-white/60 bg-white/40 backdrop-blur-md rounded-2xl shadow-md overflow-hidden flex flex-col min-h-[550px]">
             {/* Header Tabs Báo Cáo */}
             <div className="border-b border-neutral-200/40 px-5 py-3 bg-white/35 flex flex-col sm:flex-row justify-between items-center gap-3">
               <div className="flex items-center gap-2">
@@ -640,7 +641,7 @@ export default function DashboardPage() {
 
             {/* Nội dung nhúng hoặc giả lập báo cáo */}
             <div className="flex-1 p-6 bg-neutral-50/40 flex flex-col gap-4">
-              <div className="flex-1 border border-red-500/20 bg-white/30 backdrop-blur-sm rounded-xl p-8 flex flex-col justify-center items-center text-center shadow-inner relative min-h-[300px]">
+              <div className="flex-1 border border-red-500/20 bg-white/30 backdrop-blur-sm rounded-xl p-8 flex flex-col justify-center items-center text-center shadow-inner relative min-h-[350px]">
                 {/* Lưới grid ẩn trang trí */}
                 <div className="absolute inset-0 opacity-[0.02] pointer-events-none bg-[radial-gradient(#000_1px,transparent_1px)] bg-[size:16px_16px]" />
                 
@@ -668,22 +669,15 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-        </div>
 
-      </div>
-
-      {/* Hàng cuối bento grid: Feature Importance & Model Specs */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-        
-        {/* KHỐI 4: Độ quan trọng của các tính năng (Feature Importance) (lg:col-span-5) */}
-        <div className="lg:col-span-5 flex flex-col">
-          <div className="glass-panel rounded-2xl border border-white/60 bg-white/40 backdrop-blur-md shadow-md flex flex-col h-full overflow-hidden">
+          {/* Component 4: Trọng số Đặc trưng (Feature Importance) */}
+          <div className="glass-panel rounded-2xl border border-white/60 bg-white/40 backdrop-blur-md shadow-md flex flex-col overflow-hidden">
             <div className="border-b border-neutral-200/40 px-5 py-3.5 font-bold uppercase tracking-wider text-xs bg-white/35 text-neutral-800 flex items-center gap-2">
               <span className="w-1.5 h-4 bg-red-500 rounded-full inline-block shrink-0" />
               Trọng số Đặc trưng (Feature Importance)
             </div>
             
-            <div className="p-5 flex-1 flex flex-col justify-between gap-5">
+            <div className="p-5 flex flex-col gap-5">
               <p className="text-xs text-neutral-500 font-semibold leading-relaxed">
                 Biểu đồ mô phỏng trọng số của các yếu tố sinh học tác động mạnh nhất đến kết quả chẩn đoán bệnh tim từ bộ dữ liệu Kaggle.
               </p>
@@ -717,14 +711,15 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-          {/* Khối Đánh giá mô hình ML di chuyển vào cột bên phải */}
-          <div className="glass-panel rounded-2xl border border-white/60 bg-white/40 backdrop-blur-md shadow-md flex flex-col h-full overflow-hidden">
+
+          {/* Component 5: Đánh giá Mô hình Machine Learning */}
+          <div className="glass-panel rounded-2xl border border-white/60 bg-white/40 backdrop-blur-md shadow-md flex flex-col overflow-hidden">
             <div className="border-b border-neutral-200/40 px-5 py-3.5 font-bold uppercase tracking-wider text-xs bg-white/35 text-neutral-800 flex items-center gap-2">
               <span className="w-1.5 h-4 bg-red-500 rounded-full inline-block shrink-0" />
               Đánh giá Mô hình Machine Learning
             </div>
             
-            <div className="p-5 flex-1 flex flex-col justify-between gap-4 bg-white/10">
+            <div className="p-5 flex flex-col gap-4 bg-white/10">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 {/* XGBoost Card */}
                 <div className="bg-white/50 border border-neutral-200/30 p-4 rounded-xl shadow-sm flex flex-col justify-between h-full">

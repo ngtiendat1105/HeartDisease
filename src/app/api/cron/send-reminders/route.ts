@@ -10,14 +10,17 @@ const supabaseAdmin = createClient(supabaseUrl, supabaseKey);
 
 export async function GET(req: Request) {
   try {
-    // 1. Kiểm tra bảo mật từ Vercel Cron Header ở Production
-    const authHeader = req.headers.get('Authorization');
-    if (process.env.NODE_ENV === 'production' && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      console.warn('[Vercel Cron] Cảnh báo: Cố gắng truy cập trái phép bị từ chối.');
-      return new Response(JSON.stringify({ error: 'Unauthorized access' }), {
-        status: 401,
-        headers: { 'Content-Type': 'application/json' },
-      });
+    // 1. Kiểm tra bảo mật qua Query Parameter 'secret' ở Production
+    const { searchParams } = new URL(req.url);
+    const secret = searchParams.get('secret');
+    const cronSecret = process.env.CRON_SECRET;
+
+    if (process.env.NODE_ENV === 'production' && (!secret || secret !== cronSecret)) {
+      console.warn('[Vercel Cron] Cảnh báo: Cố gắng truy cập trái phép bị từ chối do thiếu hoặc sai mã bí mật.');
+      return NextResponse.json(
+        { error: 'Unauthorized access' },
+        { status: 401 }
+      );
     }
 
     const now = new Date().toISOString();
