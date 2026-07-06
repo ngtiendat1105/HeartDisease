@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Stethoscope } from "lucide-react";
+import { Header } from "@/components/Header";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -23,51 +23,8 @@ export default function RootLayout({
         <div className="fixed -bottom-32 left-1/4 w-[350px] h-[350px] bg-red-100/20 rounded-full blur-[100px] pointer-events-none -z-10" />
 
         {/* Thanh Điều Hướng (Sticky Glass Navbar) */}
-        <header className="sticky top-0 z-50 border-b border-white/60 bg-white/75 backdrop-blur-md p-4 shadow-sm shadow-red-100/5">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-            <Link href="/" className="flex items-center gap-3 select-none">
-              {/* Doctor's stethoscope logo in a medical-red circle wrapper */}
-              <div className="bg-red-650 text-white p-2 rounded-xl border border-red-550/20 shadow-sm shadow-red-550/25 flex items-center justify-center bg-red-600">
-                <Stethoscope size={20} className="stroke-[2.5]" />
-              </div>
-              <div>
-                <h1 className="font-black uppercase tracking-tight text-lg sm:text-xl leading-none text-neutral-900">
-                  HeartDisease <span className="text-red-600">AI</span>
-                </h1>
-                <span className="text-[10px] font-bold uppercase tracking-widest text-red-600">
-                  Dự đoán ML & Báo cáo Power BI
-                </span>
-              </div>
-            </Link>
-            
-            <nav className="flex items-center gap-1 sm:gap-2 text-xs font-black uppercase tracking-wider text-neutral-600">
-              <Link 
-                href="/" 
-                className="px-3 py-2 rounded-lg hover:bg-neutral-100/50 hover:text-red-600 transition-all"
-              >
-                Tổng quan
-              </Link>
-              <Link 
-                href="/du-doan" 
-                className="px-3 py-2 rounded-lg hover:bg-neutral-100/50 hover:text-red-600 transition-all text-neutral-800"
-              >
-                Dự đoán Nguy cơ
-              </Link>
-              <Link 
-                href="/bao-cao" 
-                className="px-3 py-2 rounded-lg hover:bg-neutral-100/50 hover:text-red-600 transition-all"
-              >
-                Báo cáo Power BI
-              </Link>
-              <Link 
-                href="/tai-lieu" 
-                className="px-3 py-2 rounded-lg hover:bg-neutral-100/50 hover:text-red-600 transition-all"
-              >
-                Tài liệu Kỹ thuật
-              </Link>
-            </nav>
-          </div>
-        </header>
+        <Header />
+
 
         {/* Khu Vực Nội Dung Chính (Main Content Area) */}
         <main className="flex-1 relative">

@@ -141,6 +141,7 @@ export const PredictionForm: React.FC = () => {
           score={result.score}
           onReset={handleReset}
           recommendations={result.recommendations}
+          form={form}
         />
       ) : (
         <form onSubmit={calculateRisk} className="flex flex-col gap-6">

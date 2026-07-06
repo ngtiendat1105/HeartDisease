@@ -13,8 +13,16 @@ interface PredictRequest {
   modelType?: 'xgboost' | 'random_forest' | 'logistic_regression';
 }
 
-// Caching các phiên làm việc của từng mô hình để tối ưu hóa hiệu năng
-const sessions: Record<string, ort.InferenceSession> = {};
+// Khai báo kiểu cho đối tượng cache toàn cục để tránh lỗi TypeScript
+declare global {
+  var sessionsCache: { [key: string]: ort.InferenceSession } | undefined;
+}
+
+// Khởi tạo cache toàn cục ngoài hàm POST để giữ lại các phiên làm việc của mô hình
+const sessionsCache = globalThis.sessionsCache || {};
+if (process.env.NODE_ENV !== 'production') {
+  globalThis.sessionsCache = sessionsCache;
+}
 
 // Cấu hình bản đồ ánh xạ mô hình
 const MODEL_CONFIG = {
@@ -26,13 +34,11 @@ const MODEL_CONFIG = {
   random_forest: {
     fileName: 'heart_rf_model.onnx',
     displayName: 'Random Forest',
-    // Chỉ lấy output_label vì output_probability trả về Sequence of Maps (không được hỗ trợ bởi onnxruntime-node)
     outputNames: ['output_label']
   },
   logistic_regression: {
     fileName: 'heart_lr_model.onnx',
     displayName: 'Logistic Regression',
-    // Chỉ lấy output_label vì tương tự Random Forest
     outputNames: ['output_label']
   }
 };
@@ -43,17 +49,24 @@ async function getInferenceSession(modelType: 'xgboost' | 'random_forest' | 'log
     throw new Error(`Thuật toán không được hỗ trợ: ${modelType}`);
   }
 
-  if (!sessions[modelType]) {
-    const modelPath = path.join(process.cwd(), 'public', config.fileName);
+  const fileName = config.fileName;
+
+  // Kiểm tra xem session đã tồn tại trong cache chưa
+  if (!sessionsCache[fileName]) {
+    const modelPath = path.join(process.cwd(), 'public', fileName);
     try {
-      sessions[modelType] = await ort.InferenceSession.create(modelPath);
-      console.log(`ONNX Model [${config.displayName}] loaded successfully from:`, modelPath);
+      console.log(`[Cache Miss] Loading ONNX model [${config.displayName}] from disk: ${modelPath}`);
+      sessionsCache[fileName] = await ort.InferenceSession.create(modelPath);
+      console.log(`[Cache Saved] ONNX Model [${config.displayName}] loaded and cached successfully.`);
     } catch (err: any) {
-      console.error(`Failed to load ONNX model [${config.displayName}] from:`, modelPath, err);
+      console.error(`Failed to load ONNX model [${config.displayName}] from: ${modelPath}`, err);
       throw new Error(`Không thể khởi tạo mô hình ${config.displayName}: ${err.message}`);
     }
+  } else {
+    console.log(`[Cache Hit] Reusing cached session for ONNX model: ${fileName}`);
   }
-  return sessions[modelType];
+
+  return sessionsCache[fileName];
 }
 
 export async function POST(request: NextRequest) {
@@ -100,7 +113,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Khởi tạo/Lấy phiên làm việc của mô hình tương ứng
+    // 3. Khởi tạo/Lấy phiên làm việc của mô hình từ cache
     const resolvedModelType = modelType as 'xgboost' | 'random_forest' | 'logistic_regression';
     const inferenceSession = await getInferenceSession(resolvedModelType);
     const config = MODEL_CONFIG[resolvedModelType];
